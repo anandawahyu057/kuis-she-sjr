@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+from datetime import datetime
+import os
 
 # --- KONFIGURASI HALAMAN ---
 st.set_page_config(page_title="KUIS SHE", page_icon="👷", layout="centered")
@@ -10,7 +12,7 @@ st.subheader("PT SUMBAWA JUTARAYA")
 st.caption("SHE & BIODIVERSITY DEPARTMENT")
 st.markdown("---")
 
-# --- LOAD DATABASE EXCEL ---
+# --- LOAD DATABASE EXCEL / CSV ---
 @st.cache_data
 def load_data():
     df = pd.read_csv("Bank_Soal.csv")
@@ -68,7 +70,7 @@ if nama_peserta and departemen != "Pilih":
         st.markdown("---")
         submitted = st.form_submit_button("Submit & Evaluasi Otomatis", type="primary")
         
-        # --- MESIN PENILAIAN ---
+        # --- MESIN PENILAIAN & PENYIMPANAN OTOMATIS ---
         if submitted:
             # Validasi: Cek apakah ada soal yang belum dijawab
             belum_dijawab = False
@@ -95,10 +97,31 @@ if nama_peserta and departemen != "Pilih":
                     
                     if jawab == kunci:
                         skor_total += bobot_angka
-                        
+                
+                # Menentukan status kelulusan (KKM: 120)
+                status_hasil = "LULUS" if skor_total >= 120 else "GAGAL"
+                
+                # --- SIMPAN DATA KE CSV REKAP ---
+                data_baru = pd.DataFrame({
+                    "Timestamp": [datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
+                    "Nama": [nama_peserta],
+                    "Departemen": [departemen],
+                    "Skor Akhir": [skor_total],
+                    "Status": [status_hasil]
+                })
+                
+                file_rekap = "rekap_nilai_she.csv"
+                if os.path.exists(file_rekap):
+                    df_existing = pd.read_csv(file_rekap)
+                    df_updated = pd.concat([df_existing, data_baru], ignore_index=True)
+                else:
+                    df_updated = data_baru
+                    
+                df_updated.to_csv(file_rekap, index=False)
+                
                 # Tampilan Hasil Eksekutif
                 st.markdown("### 📊 Hasil Asesmen")
-                if skor_total >= 120:
+                if status_hasil == "LULUS":
                     st.balloons()
                     st.success(f"**STATUS: LULUS** 🎉")
                     st.write(f"Selamat **{nama_peserta}** dari departemen **{departemen}**, skor akhir Anda: **{skor_total} Poin**.")
@@ -107,6 +130,33 @@ if nama_peserta and departemen != "Pilih":
                     st.error(f"**STATUS: GAGAL** ❌")
                     st.write(f"Maaf **{nama_peserta}**, skor Anda **{skor_total} Poin** (KKM: 120).")
                     st.warning("Silakan pelajari kembali modul prosedur dan coba lagi.")
+
+# --- PANEL ADMIN: MELIHAT REKAP NILAI PESERTA ---
+st.markdown("---")
+with st.expander("🔐 Panel Khusus Admin: Rekapitulasi Nilai Peserta Kuis"):
+    st.markdown("<p style='font-size: 0.85rem; color: #64748b;'>Masukkan kata sandi admin untuk mengakses database nilai seluruh responden.</p>", unsafe_allow_html=True)
+    password_admin = st.text_input("Password Admin:", type="password", key="input_password_admin")
+    
+    if password_admin == "sjr2026":  # Password dapat diubah sesuai kebutuhan
+        file_rekap = "rekap_nilai_she.csv"
+        if os.path.exists(file_rekap):
+            df_hasil = pd.read_csv(file_rekap)
+            st.markdown("#### Daftar Nilai & Hasil Ujian Peserta")
+            st.dataframe(df_hasil, use_container_width=True)
+            
+            # Tombol Unduh Rekap Nilai
+            csv_data_quiz = df_hasil.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="Unduh Rekap Nilai (.CSV)",
+                data=csv_data_quiz,
+                file_name="Rekap_Nilai_Kuis_SHE.csv",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary"
+            )
+        else:
+            st.info("Belum ada data peserta yang terekam di sistem.")
+    elif password_admin != "":
+        st.error("Kata sandi admin tidak valid.")
 
 # --- FOOTER ---
 st.markdown("---")
